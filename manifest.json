@@ -1,0 +1,24 @@
+{
+  "author": "igorlogius",
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "icons": {
+    "225": "icon.png"
+  },
+  "browser_action": {
+    "default_area": "tabstrip",
+    "default_title": "Toggle Stack State"
+  },
+  "manifest_version": 2,
+  "name": "Tab Stack",
+  "permissions": [
+      "tabs",
+      "menus",
+      "tabHide",
+      "notifications"
+  ],
+  "version": "1.0.0"
+}
