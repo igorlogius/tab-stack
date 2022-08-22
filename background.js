@@ -41,9 +41,11 @@ async function unstack(){
     if(isStacked(activTab.id)){
 
         let tmp = [];
-        for(const k of tab2top.keys()){
-            tmp.push(k);
-            tab2top.delete(k);
+        for(const [k,v] of tab2top){
+            if( v === activTab.id){
+                tmp.push(k);
+                tab2top.delete(k);
+            }
         }
         browser.tabs.move(tmp, {index: -1});
         browser.tabs.show(tmp);
