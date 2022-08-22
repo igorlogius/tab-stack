@@ -33,6 +33,15 @@ function getRest(id) {
     return tmp;
 }
 
+function setFavicon(tab) {
+    browser.tabs.executeScript(tab.id, {
+            code: "var link = document.querySelector(\"link[rel*='icon']\") || document.createElement('link');\n" +
+                "    link.type = 'image/x-icon';\n" +
+                "    link.rel = 'shortcut icon';\n" +
+                "    link.href = '" + browser.runtime.getURL("icon.png")  + "';\n" +
+                "    document.getElementsByTagName('head')[0].appendChild(link);"
+    });
+}
 
 async function unstack(){
 
@@ -100,6 +109,7 @@ async function toggleStack(activTab) {
 
     if(isTop(activTab.id)){
 
+
         topTab = activTab;
 
         // focus top
@@ -120,14 +130,18 @@ async function toggleStack(activTab) {
                     // move host tab to front or back
                     if(show){
                         await browser.tabs.move(topTab.id, {index: -1});
+                        tmp.push(topTab.id);
                     }else{
-                        await browser.tabs.move(topTab.id, {index:  0});
+                        //await browser.tabs.move(topTab.id, {index:  0});
+                        browser.tabs.update(topTab.id, { pinned: true, active: true, highlighted: true});
                     }
                 }
                 tmp.push(k);
             }
         }
         if(show){
+            browser.tabs.update(topTab.id, { pinned: false, active: true, highlighted: true});
+            //browser.tabs.move(topTab.id, {index: -1});
             browser.tabs.move(tmp, {index: -1});
             browser.tabs.show(tmp);
         }else{
@@ -135,6 +149,8 @@ async function toggleStack(activTab) {
             // keep the tabs into an aligend postion
             // when the stack gets removed
             browser.tabs.move(tmp, {index:  0});
+
+
         }
     }else{ // not a host
         topTab = await browser.tabs.get(getTop(activTab.id));
@@ -146,6 +162,7 @@ async function toggleStack(activTab) {
         browser.tabs.hide(tmp);
         browser.tabs.move(tmp, {index:  0});
     }
+    setFavicon(topTab);
     handleActivated({tabId: topTab.id, windowId: activTab.windowId});
 }
 
@@ -198,14 +215,51 @@ function handleRemoved(tabId /*, removeInfo */) {
     }
 }
 
+function onTabUpdated(tabId, changeInfo, tab){
+    console.log('onTabUpdated');
+
+    if(isTop(tabId) && tab.status === 'complete'){
+        setFavicon(tab);
+    }
+
+}
+
 browser.browserAction.disable();
 
-browser.menus.create({ title: "Stack Tabs", contexts: ["tab"],  onclick: stack});
-browser.menus.create({ title: "Unstack Tabs",  contexts: ["tab"], onclick: unstack});
+browser.menus.create({ id: 'toggleStack', title: "",  contexts: ["tab"], onclick: toggleStack});
+
+browser.menus.onShown.addListener(async (/*info, tab*/) => {
+  //let menuInstanceId = nextMenuInstanceId++;
+  //lastMenuInstanceId = menuInstanceId;
+
+  const activTab = (await browser.tabs.query({ currentWindow: true, active: true}))[0];
+  const selectedTabs = (await browser.tabs.query({ currentWindow: true, highlighted: true}));
+    if(isStacked(activTab.id)){
+        browser.menus.update('toggleStack', {
+        title: 'UnStack',
+        visible: true,
+        onclick: unstack
+        });
+  browser.menus.refresh();
+
+    }else if(selectedTabs.length > 1) {
+        browser.menus.update('toggleStack', {
+        title: 'Stack',
+        visible: true,
+        onclick: stack
+        });
+  browser.menus.refresh();
+    }else{
+        browser.menus.update('toggleStack', {
+        visible: false
+        });
+  // must now perform the check
+  browser.menus.refresh();
+    }
+});
 
 browser.browserAction.onClicked.addListener(toggleStack);
 browser.tabs.onActivated.addListener(handleActivated);
 browser.tabs.onRemoved.addListener(handleRemoved);
 
-
-//browser.tabs.onUpdated.addListener(onTabUpdated);
+browser.tabs.onUpdated.addListener(onTabUpdated, { properties: ["status"] } );

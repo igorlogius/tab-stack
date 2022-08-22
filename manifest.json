@@ -18,7 +18,11 @@
       "tabs",
       "menus",
       "tabHide",
-      "notifications"
+      "notifications",
+      "<all_urls>"
   ],
-  "version": "1.0.2"
+  "version": "1.0.2",
+  "web_accessible_resources": [
+    "icon.png"
+  ]
 }
