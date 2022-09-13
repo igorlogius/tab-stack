@@ -22,6 +22,32 @@ function getTop(id){
     return tab2top.get(id);
 }
 
+function setTop(id){
+
+    /*
+    if(isTop(id)){
+        return;
+    }
+    */
+
+    const old_top = getTop(id);
+    const new_top = id;
+
+    tab2top.set(old_top, new_top);
+    tab2top.set(new_top, new_top);
+
+    const tmp = [];
+    for(const [k,v] of tab2top){
+        if( v === old_top){
+            tmp.push(k);
+        }
+    }
+    for(const k of tmp){
+        tab2top.set(k, new_top);
+    }
+
+}
+
 function getRest(id) {
     const topId = getTop(id);
     let tmp = [];
@@ -155,10 +181,13 @@ async function toggleStack(activTab) {
             // keep the tabs into an aligend postion
             // when the stack gets removed
             browser.tabs.move(tmp, {index:  0});
-
-
         }
-    }else{ // not a host
+        handleActivated({tabId: topTab.id, windowId: activTab.windowId});
+    }else { // is stacked
+        setTop(activTab.id);
+        toggleStack(activTab);
+    }
+    /*else{ // not a host
         topTab = await browser.tabs.get(getTop(activTab.id));
         await browser.tabs.highlight({tabs: [topTab.index]});
 
@@ -167,9 +196,9 @@ async function toggleStack(activTab) {
         const tmp = getRest(topTab.id);
         browser.tabs.hide(tmp);
         browser.tabs.move(tmp, {index:  0});
-    }
+    }*/
     //setFavicon(topTab);
-    handleActivated({tabId: topTab.id, windowId: activTab.windowId});
+    //handleActivated({tabId: topTab.id, windowId: activTab.windowId});
 }
 
 
