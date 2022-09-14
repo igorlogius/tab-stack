@@ -3,32 +3,22 @@
 const manifest = browser.runtime.getManifest();
 const extname = manifest.name;
 const tab2top = new Map();
+let multipleHighlighted = false;
+
 
 function isStacked(id){
     return tab2top.has(id);
 }
 
 function isTop(id){
-    if(!isStacked(id)) {
-        console.error('called isTop, with unstacked id');
-    }
     return (id === tab2top.get(id));
 }
 
 function getTop(id){
-    if(!isStacked(id)){
-        console.error('called getTop, with unstacked id');
-    }
     return tab2top.get(id);
 }
 
 function setTop(id){
-
-    /*
-    if(isTop(id)){
-        return;
-    }
-    */
 
     const old_top = getTop(id);
     const new_top = id;
@@ -45,7 +35,6 @@ function setTop(id){
     for(const k of tmp){
         tab2top.set(k, new_top);
     }
-
 }
 
 function getRest(id) {
@@ -59,24 +48,11 @@ function getRest(id) {
     return tmp;
 }
 
-/*  // needs all_url permission, which sucks
-function setFavicon(tab) {
-    browser.tabs.executeScript(tab.id, {
-            code: "var link = document.querySelector(\"link[rel*='icon']\") || document.createElement('link');\n" +
-                "    link.type = 'image/x-icon';\n" +
-                "    link.rel = 'shortcut icon';\n" +
-                "    link.href = '" + browser.runtime.getURL("icon.png")  + "';\n" +
-                "    document.getElementsByTagName('head')[0].appendChild(link);"
-    });
-}
-*/
-
 async function unstack(tab){
 
     if(isStacked(tab.id)){
 
         const topTab= getTop(tab.id);
-
 
         let tmp = [topTab];
         for(const [k,v] of tab2top){
@@ -92,43 +68,28 @@ async function unstack(tab){
         browser.tabs.show(tmp);
 
         notify(extname, 'Unstack (menu)');
-        handleActivated({tabId: topTab.id, windowId: topTab.windowId});
+        onTabActivated({tabId: topTab.id, windowId: topTab.windowId});
     }else{
         notify(extname, 'active tab not stacked, nothing to unstack');
     }
 }
 
-async function stack(tab) {
+async function stack() {
 
     const selectedTabs = (await browser.tabs.query({ currentWindow: true, highlighted: true }));
+    const tab = selectedTabs.filter( t => t.active )[0];
 
-    if(selectedTabs.length < 2){
-        notify(extname, 'More than one tab required to stack');
-        return;
-    }
-
-    for(const t of selectedTabs) {
-        if(isStacked(t.id)){
-            notify(extname, 'Double stacking not allowed. Sorry.');
-            return;
-        }
-    }
-
-    tab2top.set(tab.id, tab.id);
     for(const t of selectedTabs) {
         tab2top.set(t.id, tab.id);
     }
 
     notify(extname, 'Tabs stacked');
-
-    toggleStack(tab);
-
+    toggleStackStatus(tab);
 }
-
 
 // param tab: currently active Tab
 // can be a host, a guest or undefined
-async function toggleStack(activTab) {
+async function toggleStackStatus(activTab) {
 
     /* when the disable works correctly this is not necessary */
     if(!isStacked(activTab.id)){
@@ -137,10 +98,9 @@ async function toggleStack(activTab) {
     }
     /**/
 
-        let topTab;
+    let topTab;
 
     if(isTop(activTab.id)){
-
 
         topTab = activTab;
 
@@ -182,27 +142,14 @@ async function toggleStack(activTab) {
             // when the stack gets removed
             browser.tabs.move(tmp, {index:  0});
         }
-        handleActivated({tabId: topTab.id, windowId: activTab.windowId});
+        onTabActivated({tabId: topTab.id, windowId: activTab.windowId});
     }else { // is stacked
         setTop(activTab.id);
-        toggleStack(activTab);
+        toggleStackStatus(activTab);
     }
-    /*else{ // not a host
-        topTab = await browser.tabs.get(getTop(activTab.id));
-        await browser.tabs.highlight({tabs: [topTab.index]});
-
-        browser.tabs.move(topTab.id, {index: 0});
-        // hide all guests
-        const tmp = getRest(topTab.id);
-        browser.tabs.hide(tmp);
-        browser.tabs.move(tmp, {index:  0});
-    }*/
-    //setFavicon(topTab);
-    //handleActivated({tabId: topTab.id, windowId: activTab.windowId});
 }
 
-
-function handleActivated(activeInfo) {
+function onTabActivated(activeInfo) {
     if(isStacked(activeInfo.tabId)){
         browser.browserAction.enable(activeInfo.tabId);
         if(isTop(activeInfo.tabId)){
@@ -217,17 +164,15 @@ function handleActivated(activeInfo) {
 }
 
 function notify(title, message = "", iconUrl = "icon.png") {
-    return browser.notifications.create(""+Date.now(),
-        {
+    return browser.notifications.create(""+Date.now(),{
            "type": "basic"
             ,iconUrl
             ,title
             ,message
-        }
-    );
+    });
 }
 
-function handleRemoved(tabId /*, removeInfo */) {
+function onTabRemoved(tabId /*, removeInfo */) {
     let tmp = [];
     if(isTop(tabId)){
         for(const [k,v] of tab2top){
@@ -249,57 +194,44 @@ function handleRemoved(tabId /*, removeInfo */) {
     }
 }
 
-/*
-function onTabUpdated(tabId, changeInfo, tab){
-
-    if(isTop(tabId) && tab.status === 'complete'){
-        setFavicon(tab);
-    }
-
-}
-*/
-
-browser.browserAction.disable();
-
-browser.menus.create({ id: 'toggleStack', title: "",  contexts: ["tab"], onclick: toggleStack});
-
-browser.menus.onShown.addListener(async (info, tab) => {
-
-    if(isStacked(tab.id)){
-        browser.menus.update('toggleStack', {
-        title: 'UnStack',
-        visible: true,
-        onclick: (info, tab) => { unstack(tab); }
-        });
-  browser.menus.refresh();
-
-    }else if(multipleHighlighted) {
-        browser.menus.update('toggleStack', {
-        title: 'Stack',
-        visible: true,
-        onclick: (info, tab) => { stack(tab); }
-        });
-  browser.menus.refresh();
-    }else{
-        browser.menus.update('toggleStack', {
-        visible: false
-        });
-        // must now perform the check
-        browser.menus.refresh();
-    }
+browser.menus.create({
+    id: 'tabmenu1',
+    title: "",
+    contexts: ["tab"],
+    onclick: toggleStackStatus
 });
 
-browser.browserAction.onClicked.addListener(toggleStack);
-browser.tabs.onActivated.addListener(handleActivated);
-browser.tabs.onRemoved.addListener(handleRemoved);
+browser.menus.onShown.addListener(async (info, tab) => {
+    if(isStacked(tab.id)){
+        browser.menus.update('tabmenu1', {
+            title: 'UnStack',
+            visible: true,
+            onclick: (info, tab) => { unstack(tab); }
+        });
+    }else if(multipleHighlighted) {
+        browser.menus.update('tabmenu1', {
+            title: 'Stack',
+            visible: true,
+            onclick: (/*info, tab*/) => { stack(); }
+        });
+    }else{
+        browser.menus.update('tabmenu1', {
+            visible: false
+        });
+    }
+    browser.menus.refresh();
+});
 
-//browser.tabs.onUpdated.addListener(onTabUpdated, { properties: ["status"] } );
-
-let multipleHighlighted = false;
-
-function handleHighlighted(highlightInfo) {
+function onTabsHighlighted(highlightInfo) {
     multipleHighlighted = (highlightInfo.tabIds.length > 1);
 }
 
-browser.tabs.onHighlighted.addListener(handleHighlighted);
+// default state of browserAction
+browser.browserAction.disable();
+
+// register listeners
+browser.browserAction.onClicked.addListener(toggleStackStatus);
+browser.tabs.onActivated.addListener(onTabActivated);
+browser.tabs.onRemoved.addListener(onTabRemoved);
+browser.tabs.onHighlighted.addListener(onTabsHighlighted);
 
